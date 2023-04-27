@@ -9,32 +9,33 @@ import dash_bootstrap_components as dbc
 import plotly.express as px
 from itertools import cycle
 from typing import List, Dict
+from pyproj import Transformer
 
 def get_rotation_angle(feature: Dict) -> float:
-    coordinates = feature['geometry']['coordinates'][:-1]  # Ignore the last point as it's a repeat of the first point
+    transformer = Transformer.from_crs(4326, 25832)  # Create a transformer from EPSG:4326 to EPSG:25832
+    coordinates = feature['geometry']['coordinates']  # Extract coordinates from the feature geometry
+    pc = [transformer.transform(coord[1], coord[0]) for coord in coordinates]  # Transform coordinates to EPSG:25832
 
-    # Find the two points with the largest distance between them
-    p1, p2 = None, None
-    max_distance = 0
-    for i in range(len(coordinates)):
-        distance = np.linalg.norm(np.array(coordinates[i]) - np.array(coordinates[i - 1]))
-        if distance > max_distance:
-            max_distance = distance
-            p1, p2 = coordinates[i], coordinates[i - 1]
+    # Calculate the side lengths of the rectangle
+    side_lengths = [np.linalg.norm(np.array(pc[i]) - np.array(pc[i - 1])) for i in range(1, 5)]
 
-    # Calculate the angle based on the two points
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    angle_rad = np.arctan2(dy, dx)
-    angle_deg = np.degrees(angle_rad)
+    # Find the indices of the two longest sides (opposite sides in a rectangle)
+    long_side_indices = sorted(range(len(side_lengths)), key=lambda i: side_lengths[i])[-2:]
 
-    # Ensure the text is never upside down by limiting the rotation angle between -90 and 90 degrees
-    # if angle_deg < -90:
-    #     angle_deg += 180
-    # elif angle_deg > 90:
-    #     angle_deg -= 180
+    p1 = np.array(pc[long_side_indices[0]])
+    p2 = np.array(pc[long_side_indices[0] + 1])
+    v = p1 - p2
+    
+    angle_rad = np.arctan2(v[0], v[1])  # Calculate the angle in radians using arctan2
+    angle_deg = np.degrees(angle_rad) + 90  # Convert the angle from radians to degrees
 
-    return angle_deg
+    # The next two conditions ensure the text is never upside down by limiting the rotation angle between -90 and 90 degrees
+    if angle_deg < -90:
+        angle_deg += 180
+    elif angle_deg > 90:
+        angle_deg -= 180
+
+    return angle_deg  # Return the rotation angle in degrees
 
 def get_centroid(gdf: gpd.GeoDataFrame, feature: Dict, properties: List[str]) -> List[float]:
     query_string = " and ".join([f"{prop} == '{feature['properties'][prop]}'" for prop in properties])
@@ -80,20 +81,33 @@ dash_app.layout = html.Div([
     url = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
     attribution = '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> '
         ),
+        # view frames rectangles
         dl.GeoJSON(
     data=geojson_data, id="viewframes", options=dict(style=ns("style"))
     ),
-    *[dl.DivMarker(position=[get_centroid(gdf, feature, ['DwgNumber'])[0],
+    # text marker
+    *[
+        dl.DivMarker(position=[get_centroid(gdf, feature, ['DwgNumber'])[0],
                              get_centroid(gdf, feature, ['DwgNumber'])[1]],
+                             iconOptions={'className': 'custom-div-icon'},
                    children=html.Div(
     f"{feature['properties']['DwgNumber']}",
+    className='custom-text-mask',
     style={'color': f"{feature['properties']['color']}",
-           'transform': f"rotate({get_rotation_angle(feature)}deg)"
+           'transform': f"rotate({get_rotation_angle(feature)}deg)",
+           'font-size': '18px',  # Adjust the font size
+           'font-weight': 'bold',  # Adjust the font weight
+           #'background-color': 'rgba(255, 255, 255, 0.7)',  # Add a background color with some transparency
+           #'padding': '5px',  # Add padding around the text
+           #'border-radius': '5px'  # Add rounded corners to the background
            }))
-          for feature in geojson_data["features"]]
+          for feature in geojson_data["features"]
+          ]
     ], style={'width': '100%', 'height': '100vh', 'margin': "auto", "display": "block"}, id="map"),
     html.Div(id="click-output")
 ])
+
+
 
 @dash_app.callback(Output("click-output", "children"), Input("viewframes", "click_feature"))
 def on_viewframe_click(feature):
