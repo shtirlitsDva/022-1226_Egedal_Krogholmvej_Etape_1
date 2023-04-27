@@ -1,13 +1,50 @@
 import geopandas as gpd
 import os
 import dash_leaflet as dl
-from dash_leaflet import Marker
+from dash_leaflet import Marker, DivMarker
 import numpy as np
 from dash import Dash, html, Output, Input
 from dash_extensions.javascript import Namespace
 import dash_bootstrap_components as dbc
 import plotly.express as px
 from itertools import cycle
+from typing import List, Dict
+
+def get_rotation_angle(feature: Dict) -> float:
+    coordinates = feature['geometry']['coordinates'][:-1]  # Ignore the last point as it's a repeat of the first point
+
+    # Find the two points with the largest distance between them
+    p1, p2 = None, None
+    max_distance = 0
+    for i in range(len(coordinates)):
+        distance = np.linalg.norm(np.array(coordinates[i]) - np.array(coordinates[i - 1]))
+        if distance > max_distance:
+            max_distance = distance
+            p1, p2 = coordinates[i], coordinates[i - 1]
+
+    # Calculate the angle based on the two points
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    angle_rad = np.arctan2(dy, dx)
+    angle_deg = np.degrees(angle_rad)
+
+    # Ensure the text is never upside down by limiting the rotation angle between -90 and 90 degrees
+    # if angle_deg < -90:
+    #     angle_deg += 180
+    # elif angle_deg > 90:
+    #     angle_deg -= 180
+
+    return angle_deg
+
+def get_centroid(gdf: gpd.GeoDataFrame, feature: Dict, properties: List[str]) -> List[float]:
+    query_string = " and ".join([f"{prop} == '{feature['properties'][prop]}'" for prop in properties])
+    filtered_gdf = gdf.query(query_string)
+    
+    if not filtered_gdf.empty:
+        centroid = filtered_gdf.iloc[0].geometry.centroid
+        return [centroid.y, centroid.x]
+    else:
+        return None
 
 cwd = os.getcwd()
 
@@ -45,7 +82,15 @@ dash_app.layout = html.Div([
         ),
         dl.GeoJSON(
     data=geojson_data, id="viewframes", options=dict(style=ns("style"))
-    )
+    ),
+    *[dl.DivMarker(position=[get_centroid(gdf, feature, ['DwgNumber'])[0],
+                             get_centroid(gdf, feature, ['DwgNumber'])[1]],
+                   children=html.Div(
+    f"{feature['properties']['DwgNumber']}",
+    style={'color': f"{feature['properties']['color']}",
+           'transform': f"rotate({get_rotation_angle(feature)}deg)"
+           }))
+          for feature in geojson_data["features"]]
     ], style={'width': '100%', 'height': '100vh', 'margin': "auto", "display": "block"}, id="map"),
     html.Div(id="click-output")
 ])
