@@ -54,7 +54,7 @@ def find(name, path):
         if name in files:
             return os.path.join(root, name)
 
-colors = cycle(px.colors.qualitative.Plotly)
+colors:str = cycle(px.colors.qualitative.Plotly)
 
 # Instantiate dash app
 dash_app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -76,7 +76,7 @@ ns = Namespace("myNamespace", "mySubNamespace")
 
 dash_app.layout = html.Div([
     dl.Map(center=[np.mean(gdf.geometry.centroid.y), np.mean(gdf.geometry.centroid.x)], 
-           zoom=13, children=[
+           zoom=17, children=[
         dl.TileLayer( # this styles base map
     url = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
     attribution = '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> '
@@ -90,29 +90,26 @@ dash_app.layout = html.Div([
         dl.DivMarker(position=[get_centroid(gdf, feature, ['DwgNumber'])[0],
                              get_centroid(gdf, feature, ['DwgNumber'])[1]],
                              iconOptions={'className': 'custom-div-icon'},
-                   children=html.Div(
+                   children=
+                   html.A(
+    html.Div(
     f"{feature['properties']['DwgNumber']}",
-    className='custom-text-mask',
+    className='custom-text', # assets/custom.css
     style={'color': f"{feature['properties']['color']}",
            'transform': f"rotate({get_rotation_angle(feature)}deg)",
            'font-size': '18px',  # Adjust the font size
            'font-weight': 'bold',  # Adjust the font weight
-           #'background-color': 'rgba(255, 255, 255, 0.7)',  # Add a background color with some transparency
-           #'padding': '5px',  # Add padding around the text
-           #'border-radius': '5px'  # Add rounded corners to the background
-           }))
-          for feature in geojson_data["features"]
-          ]
-    ], style={'width': '100%', 'height': '100vh', 'margin': "auto", "display": "block"}, id="map"),
-    html.Div(id="click-output")
+           }),
+           href = feature['properties']['PdfLink'], target='_blank' # This is html.A
+           ))
+          for feature in geojson_data["features"]]
+    ], style={'width': '100%', 'height': '100vh', 'margin': "auto", "display": "block"}, id="map")
 ])
 
-
-
-@dash_app.callback(Output("click-output", "children"), Input("viewframes", "click_feature"))
-def on_viewframe_click(feature):
-    if feature is not None:
-        return f"You clicked on viewframe {feature['properties']['id']}"
+# @dash_app.callback(Output("click-output", "children"), Input("viewframes", "click_feature"))
+# def on_viewframe_click(feature):
+#     if feature is not None:
+#         return f"You clicked on viewframe {feature['properties']['id']}"
 
 if __name__ == '__main__':
     dash_app.run_server(debug=True)
