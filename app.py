@@ -120,7 +120,7 @@ dash_app.layout = html.Div([
     className='custom-text', # assets/custom.css
     style={'color': f"{feature['properties']['color']}",
            'transform': f"rotate({get_rotation_angle(feature)}deg)",
-           'font-size': '18px',  # Adjust the font size
+           'font-size': '14px',  # Adjust the font size
            'font-weight': 'bold',  # Adjust the font weight
            }),
            href = feature['properties']['PdfLink'], target='_blank' # This is html.A
